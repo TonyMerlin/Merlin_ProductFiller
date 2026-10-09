@@ -16,7 +16,8 @@ class MassFillReview
     public function __construct(
         private ProductRepositoryInterface $products,
         private ShellAssessment $assessments,
-        private FillPlanBuilder $plans
+        private FillPlanBuilder $plans,
+        private PlanFingerprint $fingerprints
     ) {
     }
 
@@ -88,7 +89,7 @@ class MassFillReview
                     $row['eligible'] = true;
                     $row['reason'] = 'Ready for review';
                     $row['plan'] = $plan;
-                    $row['fingerprint'] = $this->fingerprint($target, $source, $plan);
+                    $row['fingerprint'] = $this->fingerprints->create($target, $source, $plan);
                 }
             }
             $rows[] = $row;
@@ -96,25 +97,4 @@ class MassFillReview
         return $rows;
     }
 
-    private function fingerprint(Product $target, Product $source, array $plan): string
-    {
-        $before = [];
-        foreach (array_merge($plan['copy'], $plan['generated']) as $field => $value) {
-            $before[$field] = $field === 'category_ids'
-                ? array_map('intval', $target->getCategoryIds())
-                : $target->getData($field);
-        }
-        return hash('sha256', json_encode([
-            'target_id' => (int)$target->getId(),
-            'target_sku' => (string)$target->getSku(),
-            'target_reference' => (string)$target->getData('ebay_quote_ref'),
-            'target_updated_at' => (string)$target->getUpdatedAt(),
-            'source_id' => (int)$source->getId(),
-            'source_updated_at' => (string)$source->getUpdatedAt(),
-            'before' => $before,
-            'copy' => $plan['copy'],
-            'generated' => $plan['generated'],
-            'offer_store_ids' => $plan['offer_store_ids'],
-        ], JSON_THROW_ON_ERROR | JSON_INVALID_UTF8_SUBSTITUTE));
-    }
 }

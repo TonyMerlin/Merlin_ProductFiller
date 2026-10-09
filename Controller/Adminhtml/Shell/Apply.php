@@ -32,6 +32,7 @@ class Apply extends Action implements HttpPostActionInterface
             '--target-id' => (string)$targetId,
             '--source-id' => (string)$sourceId,
             '--confirm-sku' => (string)$this->getRequest()->getParam('confirm_sku'),
+            '--review-fingerprint' => (string)$this->getRequest()->getParam('review_fingerprint'),
         ], $this->applyCommand->getDefinition());
         $output = new BufferedOutput();
         try {
