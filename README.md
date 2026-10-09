@@ -44,11 +44,17 @@ Staff can inspect the newest 50 records under **Catalog > Product Filler Audit**
 
 The audit schema is in `etc/db_schema.xml`. Review the live dry-run SQL as part of deployment before running the normal setup upgrade.
 
+## Reviewed-plan check
+
+Every fill or repair now requires the SHA-256 review fingerprint shown by its CLI preview or carried by the admin preview form. For CLI, pass the printed value to `merlin:product-filler:apply` as `--review-fingerprint=<value>` alongside the existing IDs, confirmation SKU, and matching repair-mode flag if applicable. ProductFiller locks and reloads the target and source, rebuilds the plan, and compares the fingerprint inside the write transaction before changing attributes. If either product or the proposed plan changed, the apply rolls back and staff must preview again. Background jobs pass their stored bulk-review fingerprint to the same guarded apply path.
+
+Fingerprints created by earlier module versions cannot be used with this version. Allow existing queued jobs to finish before deploying this change, or review and queue them again afterward.
+
 ## Bulk fill in admin
 
 The shell grid has row checkboxes and **Review selected fills (95/100+ matches)** for staff with apply permission. Select up to 20 products, review the proposed source and generated title for each, then confirm the batch. A 95/100 candidate still has an exact normalized brand and model plus multiple exact model signals; 85/100 candidates remain excluded from bulk fill. Items without a current 95/100 or better exact match, target reference, or complete generated values are skipped. The bulk action never selects every filtered product automatically.
 
-At confirmation, ProductFiller compares each target, source, and proposed plan with the reviewed version, stores a background job, and returns immediately to a status page. One Magento database-queue message is published for each eligible product. The worker checks the reviewed fingerprint again immediately before calling the existing guarded apply command. Price, stock, website, image, approved damage-field rules, source-match, target-date, and audit protections remain in force. A failure on one product does not stop the others. Each successful product has its own audit record attributed to the admin who submitted the job.
+At confirmation, ProductFiller compares each target, source, and proposed plan with the reviewed version, stores a background job, and returns immediately to a status page. One Magento database-queue message is published for each eligible product. The worker checks the reviewed fingerprint before calling the guarded apply command; apply then checks the same fingerprint again inside its write transaction. Price, stock, website, image, approved damage-field rules, source-match, target-date, and audit protections remain in force. A failure on one product does not stop the others. Each successful product has its own audit record attributed to the admin who submitted the job.
 
 Staff can leave the page and return through **Catalog > Product Filler Jobs**. The list and detail pages show queued, running, filled, skipped, and failed results. A queued job older than 15 minutes warns that Magento cron may be delayed. A running item older than two hours is reconciled by a 15-minute cron job: an existing matching apply audit marks it filled; otherwise it is marked failed for review. Requeue only after checking the target and audit.
 
