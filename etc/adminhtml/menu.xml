@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Backend:etc/menu.xsd">
+    <menu>
+        <add id="Merlin_ProductFiller::view" title="Product Filler" translate="title"
+             module="Merlin_ProductFiller" sortOrder="15" parent="Magento_Catalog::inventory"
+             action="merlin_product_filler/shell/index" resource="Merlin_ProductFiller::view"/>
+        <add id="Merlin_ProductFiller::audit" title="Product Filler Audit" translate="title"
+             module="Merlin_ProductFiller" sortOrder="16" parent="Magento_Catalog::inventory"
+             action="merlin_product_filler/audit/index" resource="Merlin_ProductFiller::view"/>
+        <add id="Merlin_ProductFiller::batches" title="Product Filler Jobs" translate="title"
+             module="Merlin_ProductFiller" sortOrder="17" parent="Magento_Catalog::inventory"
+             action="merlin_product_filler/batch/index" resource="Merlin_ProductFiller::view"/>
+    </menu>
+</config>
