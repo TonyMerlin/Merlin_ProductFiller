@@ -82,6 +82,7 @@ class FillConsumer
             '--target-id' => (string)$item['target_id'],
             '--source-id' => (string)$item['source_id'],
             '--confirm-sku' => (string)$item['target_sku'],
+            '--review-fingerprint' => (string)$item['fingerprint'],
         ]);
         $output = new BufferedOutput();
         $code = $this->apply->run($input, $output);
