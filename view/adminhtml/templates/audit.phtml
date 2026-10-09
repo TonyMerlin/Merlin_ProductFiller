@@ -1,0 +1,38 @@
+<?php
+/** @var \Merlin\ProductFiller\Block\Adminhtml\Audit $block */
+$entries = $block->entries();
+?>
+<div class="admin__page-section">
+    <p><a href="<?= $block->escapeUrl($block->getUrl('merlin_product_filler/shell/index')) ?>">&larr; <?= $block->escapeHtml(__('Back to Product Filler')) ?></a></p>
+    <form method="get" action="<?= $block->escapeUrl($block->getUrl('merlin_product_filler/audit/index')) ?>">
+        <label for="audit-target-id"><?= $block->escapeHtml(__('Target product ID')) ?></label>
+        <input id="audit-target-id" name="target_id" type="number" min="1" value="<?= $block->targetFilter() ?: '' ?>"/>
+        <button type="submit"><?= $block->escapeHtml(__('Filter')) ?></button>
+        <a href="<?= $block->escapeUrl($block->getUrl('merlin_product_filler/audit/index')) ?>"><?= $block->escapeHtml(__('Clear')) ?></a>
+    </form>
+    <p><?= $block->escapeHtml(__('Showing the newest 50 successful applies. Preview and rejected attempts do not change products and are not logged here.')) ?></p>
+    <table class="data-grid"><thead><tr>
+        <th class="data-grid-th"><?= $block->escapeHtml(__('ID / UTC time')) ?></th>
+        <th class="data-grid-th"><?= $block->escapeHtml(__('Mode / actor')) ?></th>
+        <th class="data-grid-th"><?= $block->escapeHtml(__('Target')) ?></th>
+        <th class="data-grid-th"><?= $block->escapeHtml(__('Source')) ?></th>
+        <th class="data-grid-th"><?= $block->escapeHtml(__('Match')) ?></th>
+        <th class="data-grid-th"><?= $block->escapeHtml(__('Recorded changes')) ?></th>
+    </tr></thead><tbody>
+        <?php foreach ($entries as $entry): ?>
+            <tr>
+                <td><?= (int)$entry['audit_id'] ?><br/><?= $block->escapeHtml($entry['created_at']) ?></td>
+                <td><?= $block->escapeHtml($entry['mode']) ?><br/><?= $block->escapeHtml($entry['actor_name'] ?: $entry['actor_type']) ?></td>
+                <td><a href="<?= $block->escapeUrl($block->getUrl('catalog/product/edit', ['id' => (int)$entry['target_id']])) ?>"><?= $block->escapeHtml($entry['target_id'] . ' / ' . $entry['target_sku']) ?></a></td>
+                <td><a href="<?= $block->escapeUrl($block->getUrl('catalog/product/edit', ['id' => (int)$entry['source_id']])) ?>"><?= $block->escapeHtml($entry['source_id'] . ' / ' . $entry['source_sku']) ?></a></td>
+                <td><?= (int)$entry['confidence'] ?>/100<br/><?= $block->escapeHtml($entry['match_reason']) ?></td>
+                <td><?= $block->escapeHtml($block->changedFields($entry)) ?>
+                    <details><summary><?= $block->escapeHtml(__('Before / after values and warnings')) ?></summary>
+                        <pre style="white-space:pre-wrap;max-width:65rem"><?= $block->escapeHtml($block->details($entry)) ?></pre>
+                    </details>
+                </td>
+            </tr>
+        <?php endforeach; ?>
+    </tbody></table>
+    <?php if (!$entries): ?><p><?= $block->escapeHtml(__('No successful applies found.')) ?></p><?php endif; ?>
+</div>
