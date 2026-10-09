@@ -47,7 +47,8 @@ class SourceCandidateFinder
     public function find(Product $target): array
     {
         $identity = $this->identity($target);
-        if ($identity['brand'] === '' || $identity['model_key'] === '') {
+        if ($identity['brand'] === '' || $identity['model_key'] === ''
+            || $this->matchingModelEvidence($target, $identity['model_key']) === null) {
             return [];
         }
         $raw = $identity['model'];
@@ -79,20 +80,8 @@ class SourceCandidateFinder
             if ($candidateIdentity['brand'] !== $identity['brand'] || $candidateIdentity['model_key'] !== $identity['model_key']) {
                 continue;
             }
-            $matched = [];
-            if ($this->parser->modelKey((string)$candidate->getData('merlin_model_code_key')) === $identity['model_key']) {
-                $matched[] = 'exact model key';
-            }
-            if ($this->parser->modelKey((string)$candidate->getData('modelno')) === $identity['model_key']) {
-                $matched[] = 'exact modelno';
-            }
-            if ($this->parser->modelKey((string)$candidate->getData('mpn')) === $identity['model_key']) {
-                $matched[] = 'exact mpn';
-            }
-            if ($this->parser->parse((string)$candidate->getName())['model_key'] === $identity['model_key']) {
-                $matched[] = 'model in name';
-            }
-            if (!$matched) {
+            $matched = $this->matchingModelEvidence($candidate, $identity['model_key']);
+            if ($matched === null) {
                 continue;
             }
             $categories = $this->detector->categoryCount($candidate);
@@ -130,6 +119,47 @@ class SourceCandidateFinder
         // Products in this ranking contain only the fields selected above.
         // Callers building a fill plan load their chosen source in full.
         return $results;
+    }
+
+    /**
+     * A stored model key is only a lookup hint. A matching modelno, MPN, or
+     * parsed name must corroborate it, and no populated model field may
+     * contradict the target. Apply and bulk review both use these candidates.
+     */
+    private function matchingModelEvidence(Product $product, string $expectedKey): ?array
+    {
+        $matched = [];
+        $storedKey = trim((string)$product->getData('merlin_model_code_key'));
+        if ($storedKey !== '') {
+            if ($this->parser->modelKey($storedKey) !== $expectedKey) {
+                return null;
+            }
+            $matched[] = 'exact model key';
+        }
+
+        $independentMatches = 0;
+        foreach (['modelno' => 'exact modelno', 'mpn' => 'exact mpn'] as $field => $reason) {
+            $value = trim((string)$product->getData($field));
+            if ($value === '') {
+                continue;
+            }
+            if ($this->parser->modelKey($value) !== $expectedKey) {
+                return null;
+            }
+            $matched[] = $reason;
+            $independentMatches++;
+        }
+
+        $nameModel = $this->parser->parse((string)$product->getName())['model'];
+        if ($nameModel !== '') {
+            if ($this->parser->modelKey($nameModel) !== $expectedKey) {
+                return null;
+            }
+            $matched[] = 'model in name';
+            $independentMatches++;
+        }
+
+        return $independentMatches > 0 ? $matched : null;
     }
 
     private function manufacturerName(Product $product): string
