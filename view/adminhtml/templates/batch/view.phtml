@@ -1,0 +1,37 @@
+<?php
+/** @var \Merlin\ProductFiller\Block\Adminhtml\Batch $block */
+$details = $block->details();
+?>
+<div class="admin__page-section">
+    <p><a href="<?= $block->escapeUrl($block->getUrl('merlin_product_filler/batch/index')) ?>">&larr; All Product Filler Jobs</a></p>
+    <?php if (!$details): ?>
+        <p>Job not found.</p>
+    <?php else: ?>
+        <?php $batch = $details['batch']; $items = $details['items']; ?>
+        <p>Job #<?= (int)$batch['batch_id'] ?> submitted by <?= $block->escapeHtml((string)$batch['actor_name']) ?> at
+            <?= $block->escapeHtml((string)$batch['created_at']) ?> UTC.
+            <a href="<?= $block->escapeUrl($block->getUrl('merlin_product_filler/batch/view', ['id' => (int)$batch['batch_id']])) ?>">Refresh status</a>
+        </p>
+        <p>Queued and running items continue in the background. Each filled product has its own apply audit record.</p>
+        <table class="data-grid"><thead><tr>
+            <th class="data-grid-th">Target</th><th class="data-grid-th">Source</th>
+            <th class="data-grid-th">Status</th><th class="data-grid-th">Result</th>
+            <th class="data-grid-th">Started (UTC)</th><th class="data-grid-th">Finished (UTC)</th>
+        </tr></thead><tbody>
+        <?php foreach ($items as $item): ?>
+            <tr>
+                <td><a href="<?= $block->escapeUrl($block->getUrl('catalog/product/edit', ['id' => (int)$item['target_id']])) ?>"><?= (int)$item['target_id'] ?> / <?= $block->escapeHtml((string)$item['target_sku']) ?></a></td>
+                <td><a href="<?= $block->escapeUrl($block->getUrl('catalog/product/edit', ['id' => (int)$item['source_id']])) ?>"><?= (int)$item['source_id'] ?></a></td>
+                <td><?= $block->escapeHtml(ucfirst((string)$item['status'])) ?><?= $block->isStalled($item) ? ' â€” check audit; worker may have stopped' : '' ?><?= $block->isDelayed($item) ? ' â€” delayed; check Magento cron' : '' ?></td>
+                <td><?= $block->escapeHtml((string)($item['result'] ?? '')) ?>
+                    <?php if ($item['audit_id']): ?>
+                        <a href="<?= $block->escapeUrl($block->getUrl('merlin_product_filler/audit/index', ['target_id' => (int)$item['target_id']])) ?>">Audit #<?= (int)$item['audit_id'] ?></a>
+                    <?php endif; ?>
+                </td>
+                <td><?= $block->escapeHtml((string)($item['started_at'] ?? '')) ?></td>
+                <td><?= $block->escapeHtml((string)($item['finished_at'] ?? '')) ?></td>
+            </tr>
+        <?php endforeach; ?>
+        </tbody></table>
+    <?php endif; ?>
+</div>
