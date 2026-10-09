@@ -9,6 +9,7 @@ use Magento\Catalog\Api\ProductRepositoryInterface;
 use Magento\Catalog\Model\Product;
 use Magento\Framework\Exception\NoSuchEntityException;
 use Merlin\ProductFiller\Model\FillPlanBuilder;
+use Merlin\ProductFiller\Model\PlanFingerprint;
 use Merlin\ProductFiller\Model\ShellAssessment;
 use Merlin\ProductFiller\Model\TargetEligibility;
 
@@ -22,6 +23,7 @@ class Preview extends Template
         private ShellAssessment $assessments,
         private FillPlanBuilder $plans,
         private TargetEligibility $eligibility,
+        private PlanFingerprint $fingerprints,
         array $data = []
     ) {
         parent::__construct($context, $data);
@@ -88,6 +90,7 @@ class Preview extends Template
             'assessment' => $assessment,
             'match' => $match,
             'plan' => $plan,
+            'fingerprint' => $canApply ? $this->fingerprints->create($target, $source, $plan) : null,
             'can_apply' => $canApply,
             'requested_source_missing' => $sourceId > 0 && !$match,
         ];
