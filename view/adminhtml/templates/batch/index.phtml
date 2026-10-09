@@ -1,0 +1,29 @@
+<?php
+/** @var \Merlin\ProductFiller\Block\Adminhtml\Batch $block */
+$batches = $block->latest();
+?>
+<div class="admin__page-section">
+    <p>Background fills run through Magento's database queue. You can leave this page while a job is running.</p>
+    <?php if (!$batches): ?>
+        <p>No background fill jobs have been submitted yet.</p>
+    <?php else: ?>
+        <table class="data-grid"><thead><tr>
+            <th class="data-grid-th">Job</th><th class="data-grid-th">Submitted (UTC)</th>
+            <th class="data-grid-th">Admin</th><th class="data-grid-th">Total</th>
+            <th class="data-grid-th">Queued</th><th class="data-grid-th">Running</th>
+            <th class="data-grid-th">Filled</th><th class="data-grid-th">Skipped</th>
+            <th class="data-grid-th">Failed</th>
+        </tr></thead><tbody>
+        <?php foreach ($batches as $batch): ?>
+            <tr>
+                <td><a href="<?= $block->escapeUrl($block->getUrl('merlin_product_filler/batch/view', ['id' => (int)$batch['batch_id']])) ?>">#<?= (int)$batch['batch_id'] ?></a></td>
+                <td><?= $block->escapeHtml((string)$batch['created_at']) ?></td>
+                <td><?= $block->escapeHtml((string)$batch['actor_name']) ?></td>
+                <?php foreach (['total', 'queued', 'running', 'filled', 'skipped', 'failed'] as $field): ?>
+                    <td><?= (int)$batch[$field] ?></td>
+                <?php endforeach; ?>
+            </tr>
+        <?php endforeach; ?>
+        </tbody></table>
+    <?php endif; ?>
+</div>
