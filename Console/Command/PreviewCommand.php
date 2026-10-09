@@ -7,6 +7,7 @@ use Magento\Catalog\Api\ProductRepositoryInterface;
 use Magento\Catalog\Model\Product;
 use Magento\Framework\Exception\NoSuchEntityException;
 use Merlin\ProductFiller\Model\FillPlanBuilder;
+use Merlin\ProductFiller\Model\PlanFingerprint;
 use Merlin\ProductFiller\Model\ShellProductDetector;
 use Merlin\ProductFiller\Model\SourceCandidateFinder;
 use Symfony\Component\Console\Command\Command;
@@ -21,6 +22,7 @@ class PreviewCommand extends Command
         private SourceCandidateFinder $finder,
         private ShellProductDetector $detector,
         private FillPlanBuilder $plans,
+        private PlanFingerprint $fingerprints,
         string $name = null
     ) {
         parent::__construct($name);
@@ -142,6 +144,8 @@ class PreviewCommand extends Command
         foreach ($warnings as $warning) {
             $output->writeln('  - ' . $warning);
         }
+        $output->writeln('Review fingerprint: ' . $this->fingerprints->create($target, $source, $plan));
+        $output->writeln('Pass this value with --review-fingerprint when applying the reviewed plan.');
         $output->writeln('Read-only preview; no products were saved.');
         return 0;
     }
