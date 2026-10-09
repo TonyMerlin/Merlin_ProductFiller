@@ -1,0 +1,7 @@
+<?xml version="1.0"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:Communication/etc/communication.xsd">
+    <topic name="merlin.product_filler.fill" request="string">
+        <handler name="merlin_product_filler_fill" type="Merlin\ProductFiller\Model\Queue\FillConsumer" method="process"/>
+    </topic>
+</config>
