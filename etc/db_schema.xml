@@ -1,0 +1,54 @@
+<?xml version="1.0"?>
+<schema xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:Setup/Declaration/Schema/etc/schema.xsd">
+    <table name="merlin_product_filler_audit" resource="default" engine="innodb" comment="Product Filler Apply Audit">
+        <column xsi:type="int" name="audit_id" unsigned="true" nullable="false" identity="true" comment="Audit ID"/>
+        <column xsi:type="timestamp" name="created_at" nullable="false" on_update="false" default="CURRENT_TIMESTAMP" comment="Created UTC"/>
+        <column xsi:type="int" name="target_id" unsigned="true" nullable="false" comment="Target Product ID"/>
+        <column xsi:type="varchar" name="target_sku" length="64" nullable="false" comment="Target SKU At Apply"/>
+        <column xsi:type="int" name="source_id" unsigned="true" nullable="false" comment="Source Product ID"/>
+        <column xsi:type="varchar" name="source_sku" length="64" nullable="false" comment="Source SKU At Apply"/>
+        <column xsi:type="varchar" name="mode" length="32" nullable="false" comment="Apply Mode"/>
+        <column xsi:type="varchar" name="actor_type" length="16" nullable="false" comment="Admin Or CLI"/>
+        <column xsi:type="int" name="actor_id" unsigned="true" nullable="true" comment="Admin User ID"/>
+        <column xsi:type="varchar" name="actor_name" length="255" nullable="true" comment="Admin Username"/>
+        <column xsi:type="int" name="confidence" unsigned="true" nullable="false" comment="Match Confidence"/>
+        <column xsi:type="varchar" name="match_reason" length="512" nullable="false" comment="Exact Match Evidence"/>
+        <column xsi:type="longtext" name="changes_json" nullable="false" comment="Applied Field Values Before And After"/>
+        <column xsi:type="longtext" name="warnings_json" nullable="false" comment="Preview Warnings"/>
+        <constraint xsi:type="primary" referenceId="PRIMARY">
+            <column name="audit_id"/>
+        </constraint>
+        <index referenceId="MERLIN_PRODUCT_FILLER_AUDIT_TARGET" indexType="btree">
+            <column name="target_id"/>
+        </index>
+        <index referenceId="MERLIN_PRODUCT_FILLER_AUDIT_SOURCE" indexType="btree">
+            <column name="source_id"/>
+        </index>
+    </table>
+    <table name="merlin_product_filler_batch" resource="default" engine="innodb" comment="Product Filler Background Batch">
+        <column xsi:type="int" name="batch_id" unsigned="true" nullable="false" identity="true" comment="Batch ID"/>
+        <column xsi:type="timestamp" name="created_at" nullable="false" on_update="false" default="CURRENT_TIMESTAMP" comment="Created UTC"/>
+        <column xsi:type="int" name="actor_id" unsigned="true" nullable="false" comment="Admin User ID"/>
+        <column xsi:type="varchar" name="actor_name" length="255" nullable="false" comment="Admin Username"/>
+        <constraint xsi:type="primary" referenceId="PRIMARY"><column name="batch_id"/></constraint>
+    </table>
+    <table name="merlin_product_filler_batch_item" resource="default" engine="innodb" comment="Product Filler Background Batch Item">
+        <column xsi:type="int" name="item_id" unsigned="true" nullable="false" identity="true" comment="Item ID"/>
+        <column xsi:type="int" name="batch_id" unsigned="true" nullable="false" comment="Batch ID"/>
+        <column xsi:type="int" name="target_id" unsigned="true" nullable="false" comment="Target Product ID"/>
+        <column xsi:type="varchar" name="target_sku" length="64" nullable="false" comment="Target SKU At Review"/>
+        <column xsi:type="int" name="source_id" unsigned="true" nullable="false" comment="Source Product ID"/>
+        <column xsi:type="varchar" name="fingerprint" length="64" nullable="false" comment="Reviewed Plan Fingerprint"/>
+        <column xsi:type="varchar" name="status" length="16" nullable="false" default="queued" comment="Processing Status"/>
+        <column xsi:type="text" name="result" nullable="true" comment="Result Or Failure Reason"/>
+        <column xsi:type="int" name="audit_id" unsigned="true" nullable="true" comment="Apply Audit ID"/>
+        <column xsi:type="timestamp" name="created_at" nullable="false" on_update="false" default="CURRENT_TIMESTAMP" comment="Created UTC"/>
+        <column xsi:type="timestamp" name="started_at" nullable="true" on_update="false" comment="Started UTC"/>
+        <column xsi:type="timestamp" name="finished_at" nullable="true" on_update="false" comment="Finished UTC"/>
+        <constraint xsi:type="primary" referenceId="PRIMARY"><column name="item_id"/></constraint>
+        <constraint xsi:type="foreign" referenceId="MERLIN_PRODUCT_FILLER_ITEM_BATCH" table="merlin_product_filler_batch_item" column="batch_id" referenceTable="merlin_product_filler_batch" referenceColumn="batch_id" onDelete="CASCADE"/>
+        <index referenceId="MERLIN_PRODUCT_FILLER_BATCH_ITEM_BATCH" indexType="btree"><column name="batch_id"/></index>
+        <index referenceId="MERLIN_PRODUCT_FILLER_BATCH_ITEM_TARGET" indexType="btree"><column name="target_id"/></index>
+    </table>
+</schema>
