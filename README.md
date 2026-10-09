@@ -17,7 +17,7 @@ php bin/magento setup:upgrade --dry-run=1
 
 Check the dry-run output again before running the real upgrade. If generated files cannot be removed, resolve ownership or a process recreating them first. The module archive contains no generated files.
 
-This dev store's dry run previously included unrelated charset alterations. Review the live dry-run output before proceeding with the normal deployment steps:
+Review the dry-run output before proceeding with the normal deployment steps:
 
 ```bash
 php bin/magento setup:upgrade
@@ -34,7 +34,7 @@ When installing this module on live, run `php bin/magento setup:upgrade` after d
 
 Only products whose `catalog_product_entity.created_at` is on or after that time can appear as ProductFiller targets in the admin grid and CLI report, preview, or apply commands. Completed products created before the cutoff remain eligible as matching sources. If the cutoff is missing or invalid, ProductFiller refuses target operations.
 
-The live `install-check` verifies this cutoff; `php bin/magento merlin:product-filler:report --limit=1` also prints it. Deploy the module code to live without copying this dev database's `core_config_data` or `patch_list` records, so live records its own installation time.
+The `install-check` verifies this cutoff; `php bin/magento merlin:product-filler:report --limit=1` also prints it so it will record its own installation time.
 
 ## Apply audit
 
@@ -42,7 +42,7 @@ The `merlin_product_filler_audit` table records each successful fill or repair: 
 
 Staff can inspect the newest 50 records under **Catalog > Product Filler Audit**, filter by target product ID, or follow the audit-history link on a Product Filler preview. CLI: `php bin/magento merlin:product-filler:audit --target-id=144074 --limit=20`; add `--show-changes` to print full values.
 
-The audit schema is in `etc/db_schema.xml`. On this dev store, the audit table was installed separately because a `setup:upgrade --dry-run` exposed hundreds of unrelated charset alterations. Review the live dry-run SQL as part of deployment before running the normal setup upgrade.
+The audit schema is in `etc/db_schema.xml`. Review the live dry-run SQL as part of deployment before running the normal setup upgrade.
 
 ## Bulk fill in admin
 
@@ -52,6 +52,6 @@ At confirmation, ProductFiller compares each target, source, and proposed plan w
 
 Staff can leave the page and return through **Catalog > Product Filler Jobs**. The list and detail pages show queued, running, filled, skipped, and failed results. A queued job older than 15 minutes warns that Magento cron may be delayed. A running item older than two hours is reconciled by a 15-minute cron job: an existing matching apply audit marks it filled; otherwise it is marked failed for review. Requeue only after checking the target and audit.
 
-The dev store has no RabbitMQ connection, so this module uses Magento's existing `db` message queue and `consumers_runner` cron. `setup:upgrade` on live must create the two declared batch tables and register the new queue through Magento's MySQL MQ recurring setup. Confirm `php bin/magento queue:consumers:list` includes `merlin.product_filler.fill` and that Magento cron runs. If consumer cron is unavailable, a worker can be run with `php bin/magento queue:consumers:start merlin.product_filler.fill --max-messages=20`. Background processing releases the admin request; it does not shorten the underlying product save.
+This module uses Magento's existing `db` message queue and `consumers_runner` cron. `setup:upgrade` and will create the two declared batch tables and register the new queue through Magento's MySQL MQ recurring setup. Confirm `php bin/magento queue:consumers:list` includes `merlin.product_filler.fill` and that Magento cron runs. If consumer cron is unavailable, a worker can be run with `php bin/magento queue:consumers:start merlin.product_filler.fill --max-messages=20`. Background processing releases the admin request; it does not shorten the underlying product save.
 
 On dev, the two batch tables and queue registration were installed separately because the full `setup:upgrade --dry-run` exposed unrelated charset alterations. The background transport was tested using nonexistent and deliberately stale target messages; those were skipped without product writes, and the synthetic job rows were then removed.
