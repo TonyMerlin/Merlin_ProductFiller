@@ -81,6 +81,7 @@ $review = $block->getReview();
                     <input type="hidden" name="target_id" value="<?= (int)$target->getId() ?>"/>
                     <input type="hidden" name="source_id" value="<?= (int)$source->getId() ?>"/>
                     <input type="hidden" name="confirm_sku" value="<?= $block->escapeHtmlAttr((string)$target->getSku()) ?>"/>
+                    <input type="hidden" name="review_fingerprint" value="<?= $block->escapeHtmlAttr($review['fingerprint']) ?>"/>
                     <label><input type="checkbox" name="reviewed" value="1" required/>
                         <?= $block->escapeHtml(__('I have reviewed the proposed values for this stock unit.')) ?></label>
                     <div class="admin__field" style="margin-top:1rem">
