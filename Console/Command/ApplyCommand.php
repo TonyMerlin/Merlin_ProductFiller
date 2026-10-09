@@ -11,10 +11,12 @@ use Magento\Catalog\Model\ResourceModel\Product\CollectionFactory;
 use Magento\Framework\App\Area;
 use Magento\Framework\App\ResourceConnection;
 use Magento\Framework\App\State;
+use Magento\Framework\DB\Adapter\AdapterInterface;
 use Magento\Framework\Exception\LocalizedException;
 use Magento\Framework\Exception\NoSuchEntityException;
 use Merlin\ProductFiller\Model\FillPlanBuilder;
 use Merlin\ProductFiller\Model\ApplyAudit;
+use Merlin\ProductFiller\Model\PlanFingerprint;
 use Merlin\ProductFiller\Model\ShellProductDetector;
 use Merlin\ProductFiller\Model\SourceCandidateFinder;
 use Merlin\ProductFiller\Model\TrackingAttributeSetSupport;
@@ -47,6 +49,7 @@ class ApplyCommand extends Command
         private CategoryLinkManagementInterface $categoryLinks,
         private TrackingAttributeSetSupport $trackingAttributes,
         private ApplyAudit $audit,
+        private PlanFingerprint $fingerprints,
         string $name = null
     ) {
         parent::__construct($name);
@@ -68,6 +71,7 @@ class ApplyCommand extends Command
             ->addOption('target-id', null, InputOption::VALUE_REQUIRED, 'Target product ID')
             ->addOption('source-id', null, InputOption::VALUE_REQUIRED, 'Matched source product ID')
             ->addOption('confirm-sku', null, InputOption::VALUE_REQUIRED, 'Type the exact target SKU to confirm this write')
+            ->addOption('review-fingerprint', null, InputOption::VALUE_REQUIRED, 'Fingerprint printed by the reviewed preview')
             ->addOption('promotions-only', null, InputOption::VALUE_NONE, 'Update only promotion attributes on an already-filled target')
             ->addOption('oven-specs-only', null, InputOption::VALUE_NONE, 'Update only oven model specifications on an already-filled target')
             ->addOption('damage-condition-only', null, InputOption::VALUE_NONE, 'Update only damage_cond on an already-filled target')
@@ -85,6 +89,11 @@ class ApplyCommand extends Command
         $sourceId = filter_var($input->getOption('source-id'), FILTER_VALIDATE_INT);
         if (!$targetId || !$sourceId || $targetId < 1 || $sourceId < 1 || $targetId === $sourceId) {
             $output->writeln('<error>Provide distinct positive --target-id and --source-id values.</error>');
+            return 1;
+        }
+        $expectedFingerprint = (string)$input->getOption('review-fingerprint');
+        if (!preg_match('/^[a-f0-9]{64}$/', $expectedFingerprint)) {
+            $output->writeln('<error>Provide the --review-fingerprint from the preview. No changes made.</error>');
             return 1;
         }
         try {
@@ -158,15 +167,8 @@ class ApplyCommand extends Command
                 }
             }
         }
-        $plan = $promotionsOnly
-            ? $this->plans->buildPromotionsOnly($target, $source)
-            : ($ovenSpecsOnly
-                ? $this->plans->buildOvenSpecsOnly($target, $source)
-                : ($damageConditionOnly
-                    ? $this->plans->buildDamageConditionOnly($target, $source)
-                    : ($damageFieldsOnly
-                        ? $this->plans->buildDamageFieldsOnly($target, $source)
-                        : $this->plans->build($target, $source))));
+        $plan = $this->buildPlan($target, $source, $promotionsOnly, $ovenSpecsOnly,
+            $damageConditionOnly, $damageFieldsOnly);
         if ($repairOnly && !$plan['copy']) {
             $output->writeln('Selected attributes already match the source. No changes made.');
             return 0;
@@ -188,19 +190,30 @@ class ApplyCommand extends Command
             }
         }
 
-        $before = $this->protectedSnapshot($target);
-        $offerBefore = [];
-        foreach ($plan['offer_store_ids'] as $storeId) {
-            $storeProduct = $this->products->getById($targetId, false, $storeId, true);
-            $offerBefore[$storeId] = $storeProduct->getData('allow_make_an_offer_product');
-        }
-        $auditBefore = $this->audit->beforeValues($target, $plan, $offerBefore);
         $mode = $promotionsOnly ? 'promotions' : ($ovenSpecsOnly ? 'oven_specs'
             : ($damageConditionOnly ? 'damage_condition' : ($damageFieldsOnly ? 'damage_fields' : 'fill')));
         $connection = $this->resource->getConnection('catalog');
         $addedTracking = [];
         $connection->beginTransaction();
         try {
+            // Lock both product rows, then reload and rebuild from current data.
+            // A stale review must fail before attribute-set, product, or audit writes.
+            $this->lockProducts($connection, $targetId, $sourceId);
+            $target = $this->products->getById($targetId, false, 0, true);
+            $source = $this->products->getById($sourceId, false, 0, true);
+            $plan = $this->buildPlan($target, $source, $promotionsOnly, $ovenSpecsOnly,
+                $damageConditionOnly, $damageFieldsOnly);
+            $before = $this->protectedSnapshot($target);
+            $offerBefore = [];
+            foreach ($plan['offer_store_ids'] as $storeId) {
+                $storeProduct = $this->products->getById($targetId, false, $storeId, true);
+                $offerBefore[$storeId] = $storeProduct->getData('allow_make_an_offer_product');
+            }
+            $auditBefore = $this->audit->beforeValues($target, $plan, $offerBefore);
+            if (!hash_equals($expectedFingerprint, $this->fingerprints->create($target, $source, $plan))) {
+                throw new \RuntimeException('Product or source changed since preview. Review the current plan again; no changes made.');
+            }
+
             $addedTracking = $repairOnly ? [] : $this->trackingAttributes->ensure((int)$source->getAttributeSetId());
             if (isset($plan['copy']['attribute_set_id'])) {
                 $connection->update(
@@ -287,6 +300,39 @@ class ApplyCommand extends Command
         $collection->setStoreId(0)->addAttributeToFilter($field, ['eq' => $value]);
         $collection->addFieldToFilter('entity_id', ['neq' => $targetId]);
         return (int)$collection->getSize() > 0;
+    }
+
+    private function buildPlan(
+        Product $target,
+        Product $source,
+        bool $promotionsOnly,
+        bool $ovenSpecsOnly,
+        bool $damageConditionOnly,
+        bool $damageFieldsOnly
+    ): array {
+        return $promotionsOnly
+            ? $this->plans->buildPromotionsOnly($target, $source)
+            : ($ovenSpecsOnly
+                ? $this->plans->buildOvenSpecsOnly($target, $source)
+                : ($damageConditionOnly
+                    ? $this->plans->buildDamageConditionOnly($target, $source)
+                    : ($damageFieldsOnly
+                        ? $this->plans->buildDamageFieldsOnly($target, $source)
+                        : $this->plans->build($target, $source))));
+    }
+
+    private function lockProducts(AdapterInterface $connection, int $targetId, int $sourceId): void
+    {
+        $ids = [$targetId, $sourceId];
+        sort($ids);
+        $locked = array_map('intval', $connection->fetchCol($connection->select()
+            ->from($this->resource->getTableName('catalog_product_entity'), ['entity_id'])
+            ->where('entity_id IN (?)', $ids)
+            ->order('entity_id ASC')
+            ->forUpdate(true)));
+        if ($locked !== $ids) {
+            throw new \RuntimeException('Target or source product no longer exists. No changes made.');
+        }
     }
 
     private function protectedSnapshot(Product $product): array
