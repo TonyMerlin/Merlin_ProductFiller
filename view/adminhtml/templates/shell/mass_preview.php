@@ -31,14 +31,15 @@ $ready = array_values(array_filter($rows, static fn (array $row): bool => $row['
                 <td><?= (int)($row['confidence'] ?? 0) ?>/100</td>
                 <td>
                     <?php if ($row['eligible']): ?>
-                        <?= $block->escapeHtml((string)$row['plan']['generated']['name']) ?><br/>
-                        <?= $block->escapeHtml(__('%1 fields to copy; %2 fields to generate', count($row['plan']['copy']), count($row['plan']['generated']))) ?>
+                        <p><strong><?= $block->escapeHtml((string)$row['plan']['generated']['name']) ?></strong></p>
+                        <p><?= $block->escapeHtml(__('%1 fields to generate Â· %2 fields to copy Â· %3 warnings',
+                            count($row['plan']['generated']), count($row['plan']['copy']), count($row['plan']['warnings']))) ?></p>
                         <?php if ($row['plan']['warnings']): ?>
-                            <details><summary><?= $block->escapeHtml(__('Warnings')) ?></summary><ul>
+                            <details><summary><?= $block->escapeHtml(__('Show %1 warnings', count($row['plan']['warnings']))) ?></summary><ul>
                                 <?php foreach ($row['plan']['warnings'] as $warning): ?><li><?= $block->escapeHtml($warning) ?></li><?php endforeach; ?>
                             </ul></details>
                         <?php endif; ?>
-                        <a href="<?= $block->escapeUrl($block->getUrl('merlin_product_filler/shell/preview', ['target_id' => (int)$row['id'], 'source_id' => (int)$source->getId()])) ?>"><?= $block->escapeHtml(__('Full preview')) ?></a>
+                        <p><a href="<?= $block->escapeUrl($block->getUrl('merlin_product_filler/shell/preview', ['target_id' => (int)$row['id'], 'source_id' => (int)$source->getId()])) ?>"><?= $block->escapeHtml(__('Full preview: generated fields and warnings')) ?></a></p>
                     <?php else: ?>â€”<?php endif; ?>
                 </td>
                 <td><?= $block->escapeHtml($row['eligible'] ? __('Ready') : __('Skipped: %1', $row['reason'])) ?></td>
@@ -46,7 +47,8 @@ $ready = array_values(array_filter($rows, static fn (array $row): bool => $row['
         <?php endforeach; ?>
     </tbody></table>
     <?php if ($ready): ?>
-        <p><?= $block->escapeHtml(__('Confirmed products will be queued for background fill. Each product is checked again before its fill. Products changed since this review will be skipped. Stock, prices, images and protected fields remain under the existing apply safeguards.')) ?></p>
+        <p><?= $block->escapeHtml(__('Formatted source descriptions are copied unchanged. Review the full preview or source product for each fill before confirming. Active markup and unsafe HTML attributes are blocked.')) ?></p>
+        <p><?= $block->escapeHtml(__('Confirmed products will be queued for background fill. Each product is checked again before its fill. Products changed since this review will be skipped. Stock, images and protected fields remain safeguarded. If a target has no regular price, its reviewed source prices and dates will be copied.')) ?></p>
         <form method="post" action="<?= $block->escapeUrl($block->getUrl('merlin_product_filler/shell/massApply')) ?>">
             <input type="hidden" name="form_key" value="<?= $block->escapeHtmlAttr($block->getFormKey()) ?>"/>
             <?php foreach ($ready as $row): ?>
@@ -56,7 +58,7 @@ $ready = array_values(array_filter($rows, static fn (array $row): bool => $row['
                 <input type="hidden" name="expected_fingerprint[<?= (int)$row['id'] ?>]" value="<?= $block->escapeHtmlAttr($row['fingerprint']) ?>"/>
             <?php endforeach; ?>
             <label><input type="checkbox" name="reviewed" value="1" required/>
-                <?= $block->escapeHtml(__('I have reviewed the selected products and their proposed sources.')) ?></label>
+                <?= $block->escapeHtml(__('I have reviewed the selected products, their source descriptions in the full previews, and the proposed values.')) ?></label>
             <div class="admin__field" style="margin-top:1rem">
                 <button type="submit" class="action-primary"><span><?= $block->escapeHtml(__('Queue %1 reviewed products', count($ready))) ?></span></button>
             </div>

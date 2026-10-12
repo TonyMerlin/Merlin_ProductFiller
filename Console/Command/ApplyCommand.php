@@ -4,7 +4,6 @@ declare(strict_types=1);
 namespace Merlin\ProductFiller\Console\Command;
 
 use Magento\Catalog\Api\ProductRepositoryInterface;
-use Magento\Catalog\Api\CategoryLinkManagementInterface;
 use Magento\Catalog\Model\Product;
 use Magento\Catalog\Model\Product\Action as ProductAction;
 use Magento\Catalog\Model\ResourceModel\Product\CollectionFactory;
@@ -16,9 +15,11 @@ use Magento\Framework\Exception\LocalizedException;
 use Magento\Framework\Exception\NoSuchEntityException;
 use Merlin\ProductFiller\Model\FillPlanBuilder;
 use Merlin\ProductFiller\Model\ApplyAudit;
+use Merlin\ProductFiller\Model\CategoryAssignment;
 use Merlin\ProductFiller\Model\PlanFingerprint;
 use Merlin\ProductFiller\Model\ShellProductDetector;
 use Merlin\ProductFiller\Model\SourceCandidateFinder;
+use Merlin\ProductFiller\Model\StockReferencePolicy;
 use Merlin\ProductFiller\Model\TrackingAttributeSetSupport;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
@@ -46,10 +47,11 @@ class ApplyCommand extends Command
         private ResourceConnection $resource,
         private State $appState,
         private ProductAction $productAction,
-        private CategoryLinkManagementInterface $categoryLinks,
+        private CategoryAssignment $categoryAssignment,
         private TrackingAttributeSetSupport $trackingAttributes,
         private ApplyAudit $audit,
         private PlanFingerprint $fingerprints,
+        private StockReferencePolicy $references,
         string $name = null
     ) {
         parent::__construct($name);
@@ -128,8 +130,9 @@ class ApplyCommand extends Command
             return 1;
         }
         $reference = trim((string)$target->getData('ebay_quote_ref'));
-        if ($reference === '') {
-            $output->writeln('<error>Target ebay_quote_ref is missing. No changes made.</error>');
+        $referenceProblem = $this->references->problem((string)$target->getData('ebay_quote_ref'));
+        if ($referenceProblem !== null) {
+            $output->writeln('<error>' . $referenceProblem . ' No changes made.</error>');
             return 1;
         }
         if ($repairOnly && ($shell['is_shell']
@@ -150,9 +153,10 @@ class ApplyCommand extends Command
             $output->writeln('<error>Source is not a strong exact brand/model match. No changes made.</error>');
             return 1;
         }
+        $needsSourcePrice = !$repairOnly && !FillPlanBuilder::hasUsablePrice($target->getData('price'));
         if (!$match['enabled']) {
             foreach ($candidates as $candidate) {
-                if ($candidate['good'] && $candidate['enabled']) {
+                if ($candidate['good'] && $candidate['enabled'] && (!$needsSourcePrice || $candidate['priced'])) {
                     $output->writeln('<error>A good enabled source exists; select it instead. No changes made.</error>');
                     return 1;
                 }
@@ -169,6 +173,14 @@ class ApplyCommand extends Command
         }
         $plan = $this->buildPlan($target, $source, $promotionsOnly, $ovenSpecsOnly,
             $damageConditionOnly, $damageFieldsOnly);
+        if ($plan['content_errors']) {
+            $output->writeln('<error>Source content is not approved: ' . implode(' ', $plan['content_errors']) . ' No changes made.</error>');
+            return 1;
+        }
+        if ($plan['price_error']) {
+            $output->writeln('<error>' . $plan['price_error'] . ' No changes made.</error>');
+            return 1;
+        }
         if ($repairOnly && !$plan['copy']) {
             $output->writeln('Selected attributes already match the source. No changes made.');
             return 0;
@@ -203,6 +215,9 @@ class ApplyCommand extends Command
             $source = $this->products->getById($sourceId, false, 0, true);
             $plan = $this->buildPlan($target, $source, $promotionsOnly, $ovenSpecsOnly,
                 $damageConditionOnly, $damageFieldsOnly);
+            if ($plan['price_error']) {
+                throw new \RuntimeException($plan['price_error']);
+            }
             $before = $this->protectedSnapshot($target);
             $offerBefore = [];
             foreach ($plan['offer_store_ids'] as $storeId) {
@@ -226,7 +241,7 @@ class ApplyCommand extends Command
             $attributes = array_merge($attributes, $plan['generated']);
             $this->productAction->updateAttributes([$targetId], $attributes, 0);
             if (isset($plan['copy']['category_ids'])) {
-                $this->categoryLinks->assignProductToCategories($target->getSku(), $plan['copy']['category_ids']);
+                $this->categoryAssignment->assign($target, $plan['copy']['category_ids'], $connection);
             }
             foreach ($plan['offer_store_ids'] as $storeId) {
                 $this->productAction->updateAttributes(
@@ -245,18 +260,22 @@ class ApplyCommand extends Command
                 }
             }
             $after = $this->protectedSnapshot($saved);
-            if ($after !== $before) {
-                $changed = [];
-                foreach ($before['fields'] as $field => $value) {
-                    if ($after['fields'][$field] !== $value) {
-                        $changed[] = $field;
-                    }
+            $changed = [];
+            foreach ($before['fields'] as $field => $value) {
+                if (in_array($field, ['price', 'special_price', 'special_from_date', 'special_to_date'], true)
+                    && array_key_exists($field, $plan['copy'])) {
+                    continue; // The reviewed price fallback was verified by assertPlannedValues().
                 }
-                foreach (['websites', 'stock', 'source_items', 'image_count'] as $group) {
-                    if ($after[$group] !== $before[$group]) {
-                        $changed[] = $group;
-                    }
+                if ($after['fields'][$field] !== $value) {
+                    $changed[] = $field;
                 }
+            }
+            foreach (['websites', 'stock', 'source_items', 'image_count'] as $group) {
+                if ($after[$group] !== $before[$group]) {
+                    $changed[] = $group;
+                }
+            }
+            if ($changed) {
                 throw new \RuntimeException('Protected target data changed during save (' . implode(', ', $changed) . '); transaction rolled back.');
             }
             $auditId = $this->audit->record(
@@ -286,7 +305,7 @@ class ApplyCommand extends Command
         if (!$repairOnly) {
             $output->writeln('Generated fields: ' . implode(', ', array_keys($plan['generated'])));
         }
-        $output->writeln('Protected target fields, stock, websites, and images were verified unchanged.');
+        $output->writeln('Protected target fields, stock, websites, and images were verified; only a reviewed missing-price fallback may change price fields.');
         $output->writeln('Audit ID: ' . $auditId);
         foreach ($plan['warnings'] as $warning) {
             $output->writeln('Warning: ' . $warning);
@@ -375,7 +394,9 @@ class ApplyCommand extends Command
                 if ($actual !== $expected) {
                     throw new \RuntimeException('Category assignment did not match the preview.');
                 }
-            } elseif ((string)$saved->getData($field) !== (string)$value) {
+            } elseif (in_array($field, ['price', 'special_price'], true) && $value !== null && $value !== ''
+                ? number_format((float)$saved->getData($field), 6, '.', '') !== number_format((float)$value, 6, '.', '')
+                : (string)$saved->getData($field) !== (string)$value) {
                 throw new \RuntimeException('Saved ' . $field . ' did not match the preview.');
             }
         }

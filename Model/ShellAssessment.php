@@ -11,7 +11,8 @@ class ShellAssessment
 
     public function __construct(
         private ShellProductDetector $detector,
-        private SourceCandidateFinder $finder
+        private SourceCandidateFinder $finder,
+        private StockReferencePolicy $references
     ) {
     }
 
@@ -29,13 +30,14 @@ class ShellAssessment
         $shell = $this->detector->detect($target);
         $identity = $this->finder->identity($target);
         $reference = trim((string)$target->getData('ebay_quote_ref'));
+        $referenceProblem = $this->references->problem((string)$target->getData('ebay_quote_ref'));
         $candidates = $shell['is_shell'] ? $this->finder->find($target) : [];
         $best = $candidates[0] ?? null;
         if (!$shell['eligible']) {
             $action = 'Outside ProductFiller date range';
         } elseif (!$shell['is_shell']) {
             $action = 'Not a shell product';
-        } elseif ($reference === '' || $identity['brand'] === '' || $identity['model_key'] === '') {
+        } elseif ($referenceProblem !== null || $identity['brand'] === '' || $identity['model_key'] === '') {
             $action = 'Needs model/reference data';
         } elseif (!$best) {
             $action = 'New model setup required';
@@ -48,6 +50,7 @@ class ShellAssessment
             'shell' => $shell,
             'identity' => $identity,
             'reference' => $reference,
+            'reference_problem' => $referenceProblem,
             'candidates' => $candidates,
             'best' => $best,
             'action' => $action,

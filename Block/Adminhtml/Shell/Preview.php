@@ -72,13 +72,15 @@ class Preview extends Template
         }
         $plan = $source ? $this->plans->build($target, $source) : null;
         $canApply = $assessment['shell']['is_shell']
-            && $assessment['reference'] !== ''
+            && $assessment['reference_problem'] === null
             && $match && $match['good'] && $match['confidence'] >= 80
-            && $plan && $plan['generated'] && trim((string)($plan['generated']['google_sku'] ?? '')) !== ''
+            && $plan && !$plan['content_errors'] && !$plan['price_error']
+            && $plan['generated'] && trim((string)($plan['generated']['google_sku'] ?? '')) !== ''
             && strlen((string)($plan['generated']['ebay_desc'] ?? '')) <= 80;
         if ($canApply && !$match['enabled']) {
             foreach ($assessment['candidates'] as $candidate) {
-                if ($candidate['good'] && $candidate['enabled']) {
+                if ($candidate['good'] && $candidate['enabled']
+                    && (FillPlanBuilder::hasUsablePrice($target->getData('price')) || $candidate['priced'])) {
                     $canApply = false;
                     break;
                 }

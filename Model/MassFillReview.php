@@ -66,8 +66,8 @@ class MassFillReview
                 'confidence' => (int)($best['confidence'] ?? 0), 'eligible' => false];
             if (!$assessment['shell']['is_shell']) {
                 $row['reason'] = 'Not an eligible shell: ' . $assessment['shell']['reason'];
-            } elseif ($assessment['reference'] === '') {
-                $row['reason'] = 'Target ebay_quote_ref is missing.';
+            } elseif ($assessment['reference_problem'] !== null) {
+                $row['reason'] = $assessment['reference_problem'];
             } elseif (!$best || !$best['good'] || (int)$best['confidence'] < self::MIN_CONFIDENCE) {
                 $row['reason'] = 'No strong 95/100 or better exact source match is available.';
             } else {
@@ -81,7 +81,11 @@ class MassFillReview
                 }
                 $row['source'] = $source;
                 $plan = $this->plans->build($target, $source);
-                if (!$plan['generated'] || trim((string)($plan['generated']['google_sku'] ?? '')) === '') {
+                if ($plan['content_errors']) {
+                    $row['reason'] = implode(' ', $plan['content_errors']);
+                } elseif ($plan['price_error']) {
+                    $row['reason'] = $plan['price_error'];
+                } elseif (!$plan['generated'] || trim((string)($plan['generated']['google_sku'] ?? '')) === '') {
                     $row['reason'] = 'Generated values are incomplete.';
                 } elseif (strlen((string)($plan['generated']['ebay_desc'] ?? '')) > 80) {
                     $row['reason'] = 'Generated eBay title exceeds 80 characters.';

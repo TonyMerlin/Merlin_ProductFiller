@@ -7,15 +7,16 @@ use Magento\Catalog\Model\Product;
 
 class GeneratedValueBuilder
 {
-    public function __construct(private NameParser $parser)
+    public function __construct(private NameParser $parser, private StockReferencePolicy $references)
     {
     }
 
     public function build(Product $target, Product $source): array
     {
         $reference = trim((string)$target->getData('ebay_quote_ref'));
-        if ($reference === '') {
-            return ['values' => [], 'warnings' => ['Target ebay_quote_ref is missing; generated values are unavailable.']];
+        $referenceProblem = $this->references->problem((string)$target->getData('ebay_quote_ref'));
+        if ($referenceProblem !== null) {
+            return ['values' => [], 'warnings' => [$referenceProblem . ' Generated values are unavailable.']];
         }
         $base = trim((string)$source->getName());
         $base = preg_replace('/^graded\s+/i', '', $base) ?? $base;

@@ -12,6 +12,9 @@ $review = $block->getReview();
         <p><a href="<?= $block->escapeUrl($block->getUrl('merlin_product_filler/audit/index', ['target_id' => (int)$target->getId()])) ?>"><?= $block->escapeHtml(__('View fill audit history for this product')) ?></a></p>
         <p><?= $block->escapeHtml((string)$target->getName()) ?></p>
         <p><?= $block->escapeHtml(__('Reference')) ?>: <strong><?= $block->escapeHtml($assessment['reference'] ?: '(missing)') ?></strong></p>
+        <?php if ($assessment['reference_problem'] !== null): ?>
+            <div class="message message-error error"><div><?= $block->escapeHtml($assessment['reference_problem']) ?></div></div>
+        <?php endif; ?>
         <p><?= $block->escapeHtml(__('Detected brand / model')) ?>:
             <?= $block->escapeHtml($assessment['identity']['brand'] . ' / ' . $assessment['identity']['model']) ?></p>
         <p><?= $block->escapeHtml(__('Shell')) ?>: <?= $assessment['shell']['is_shell'] ? 'Yes' : 'No' ?> â€”
@@ -29,9 +32,16 @@ $review = $block->getReview();
                 <?= $block->escapeHtml($review['match']['enabled'] ? __('Enabled') : __('Disabled')) ?>,
                 <?= (int)$review['match']['confidence'] ?>/100,
                 <?= $block->escapeHtml($review['match']['match_reason']) ?></p>
+            <?php $displayWarnings = array_merge($plan['warnings'], ['Images and the explicitly skipped damage attributes are never copied.']); ?>
+            <p>
+                <strong><?= $block->escapeHtml(__('Review summary')) ?>:</strong>
+                <a href="#product-filler-generated"><?= $block->escapeHtml(__('%1 fields to generate', count($plan['generated']))) ?></a> Â·
+                <a href="#product-filler-warnings"><?= $block->escapeHtml(__('%1 warnings and safeguards', count($displayWarnings))) ?></a> Â·
+                <a href="#product-filler-copy"><?= $block->escapeHtml(__('%1 fields to copy', count($plan['copy']))) ?></a>
+            </p>
 
-            <?php foreach (['copy' => __('Fields to copy'), 'generated' => __('Fields to generate')] as $group => $heading): ?>
-                <h3><?= $block->escapeHtml($heading) ?></h3>
+            <?php foreach (['generated' => __('Fields to generate'), 'copy' => __('Fields to copy')] as $group => $heading): ?>
+                <h3 id="product-filler-<?= $block->escapeHtmlAttr($group) ?>"><?= $block->escapeHtml(__('%1 (%2)', $heading, count($plan[$group]))) ?></h3>
                 <table class="data-grid"><thead><tr>
                     <th class="data-grid-th"><?= $block->escapeHtml(__('Field')) ?></th>
                     <th class="data-grid-th"><?= $block->escapeHtml(__('Target now')) ?></th>
@@ -55,10 +65,22 @@ $review = $block->getReview();
                     </tr>
                 <?php endforeach; ?>
                 </tbody></table>
+                <?php if ($group === 'generated'): ?>
+                    <div class="message message-warning warning" id="product-filler-warnings" style="margin-top:1.5rem">
+                        <strong><?= $block->escapeHtml(__('Warnings and safeguards (%1)', count($displayWarnings))) ?></strong>
+                        <ul>
+                            <?php foreach ($displayWarnings as $warning): ?>
+                                <li><?= $block->escapeHtml($warning) ?></li>
+                            <?php endforeach; ?>
+                        </ul>
+                    </div>
+                <?php endif; ?>
             <?php endforeach; ?>
 
             <h3><?= $block->escapeHtml(__('Fields kept from target')) ?></h3>
-            <p><?= $block->escapeHtml(implode(', ', \Merlin\ProductFiller\Model\FillPlanBuilder::KEEP_FIELDS)) ?></p>
+            <p><?= $block->escapeHtml(implode(', ', array_values(array_diff(
+                \Merlin\ProductFiller\Model\FillPlanBuilder::KEEP_FIELDS, array_keys($plan['copy'])
+            )))) ?></p>
             <?php if ($plan['preserved']): ?>
                 <p><?= $block->escapeHtml(__('Existing target values retained')) ?>: <?= $block->escapeHtml(implode(', ', $plan['preserved'])) ?></p>
             <?php endif; ?>
@@ -68,12 +90,12 @@ $review = $block->getReview();
             <?php endif; ?>
             <h3><?= $block->escapeHtml(__('Fields explicitly skipped')) ?></h3>
             <p><?= $block->escapeHtml(implode(', ', \Merlin\ProductFiller\Model\FillPlanBuilder::SKIP_FIELDS)) ?></p>
-            <h3><?= $block->escapeHtml(__('Warnings')) ?></h3>
-            <ul>
-                <?php foreach (array_merge($plan['warnings'], ['Images and the explicitly skipped damage attributes are never copied.']) as $warning): ?>
-                    <li><?= $block->escapeHtml($warning) ?></li>
-                <?php endforeach; ?>
-            </ul>
+            <?php if ($plan['content_errors']): ?>
+                <div class="message message-error error"><div><?= $block->escapeHtml(__('This source contains unapproved content. Fill is blocked until the source content is corrected and reviewed again.')) ?></div></div>
+            <?php endif; ?>
+            <?php if ($plan['price_error']): ?>
+                <div class="message message-error error"><div><?= $block->escapeHtml($plan['price_error']) ?></div></div>
+            <?php endif; ?>
 
             <?php if ($review['can_apply'] && $block->canApply()): ?>
                 <form method="post" action="<?= $block->escapeUrl($block->getUrl('merlin_product_filler/shell/apply')) ?>">
@@ -83,7 +105,7 @@ $review = $block->getReview();
                     <input type="hidden" name="confirm_sku" value="<?= $block->escapeHtmlAttr((string)$target->getSku()) ?>"/>
                     <input type="hidden" name="review_fingerprint" value="<?= $block->escapeHtmlAttr($review['fingerprint']) ?>"/>
                     <label><input type="checkbox" name="reviewed" value="1" required/>
-                        <?= $block->escapeHtml(__('I have reviewed the proposed values for this stock unit.')) ?></label>
+                        <?= $block->escapeHtml(__('I have reviewed the proposed values, including the full source descriptions, for this stock unit.')) ?></label>
                     <div class="admin__field" style="margin-top:1rem">
                         <button type="submit" class="action-primary"><span><?= $block->escapeHtml(__('Apply fill to this product')) ?></span></button>
                     </div>

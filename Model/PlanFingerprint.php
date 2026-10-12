@@ -17,12 +17,16 @@ class PlanFingerprint
         }
 
         return hash('sha256', json_encode([
-            'version' => 2,
+            'version' => 4,
             'target_id' => (int)$target->getId(),
             'target_sku' => (string)$target->getSku(),
             'target_name' => (string)$target->getName(),
             'target_reference' => (string)$target->getData('ebay_quote_ref'),
             'target_status' => (string)$target->getStatus(),
+            'target_price' => (string)$target->getData('price'),
+            'target_special_price' => (string)$target->getData('special_price'),
+            'target_special_from_date' => (string)$target->getData('special_from_date'),
+            'target_special_to_date' => (string)$target->getData('special_to_date'),
             'target_attribute_set_id' => (int)$target->getAttributeSetId(),
             'target_category_ids' => array_map('intval', $target->getCategoryIds()),
             'target_manufacturer' => (string)$target->getData('manufacturer'),
@@ -35,6 +39,10 @@ class PlanFingerprint
             'source_sku' => (string)$source->getSku(),
             'source_name' => (string)$source->getName(),
             'source_status' => (string)$source->getStatus(),
+            'source_price_for_fallback' => array_key_exists('price', $plan['copy']) ? (string)$source->getData('price') : null,
+            'source_special_price_for_fallback' => array_key_exists('price', $plan['copy']) ? (string)$source->getData('special_price') : null,
+            'source_special_from_date_for_fallback' => array_key_exists('price', $plan['copy']) ? (string)$source->getData('special_from_date') : null,
+            'source_special_to_date_for_fallback' => array_key_exists('price', $plan['copy']) ? (string)$source->getData('special_to_date') : null,
             'source_attribute_set_id' => (int)$source->getAttributeSetId(),
             'source_category_ids' => array_map('intval', $source->getCategoryIds()),
             'source_manufacturer' => (string)$source->getData('manufacturer'),
@@ -45,9 +53,13 @@ class PlanFingerprint
             'source_updated_at' => (string)$source->getUpdatedAt(),
             'before' => $before,
             'copy' => $plan['copy'],
+            'content_errors' => $plan['content_errors'] ?? [],
+            'price_error' => $plan['price_error'] ?? null,
             'generated' => $plan['generated'],
             'offer_store_ids' => $plan['offer_store_ids'],
-            'attribute_set_additions' => $plan['attribute_set_additions'],
+            // Another fill can add these tracking attributes to the shared
+            // destination set between review and apply. Their absence from
+            // the plan does not change any reviewed product value.
             'preserved' => $plan['preserved'],
             'warnings' => $plan['warnings'],
         ], JSON_THROW_ON_ERROR | JSON_INVALID_UTF8_SUBSTITUTE));
