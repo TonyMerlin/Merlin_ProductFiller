@@ -40,7 +40,7 @@ class Grid extends Extended
     {
         $collection = $this->collections->create();
         $collection->setStoreId(0)->addAttributeToSelect([
-            'name', 'ebay_quote_ref', 'status', 'manufacturer', 'modelno', 'mpn',
+            'name', 'ebay_quote_ref', 'status', 'price', 'manufacturer', 'modelno', 'mpn',
             'merlin_model_brand_key', 'merlin_model_code_key',
         ]);
         $collection->addAttributeToFilter([
