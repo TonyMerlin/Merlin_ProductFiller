@@ -28,11 +28,16 @@ class Apply extends Action implements HttpPostActionInterface
             $this->messageManager->addErrorMessage(__('Review the preview and select the confirmation checkbox before applying.'));
             return $redirect->setPath('merlin_product_filler/shell/preview', ['target_id' => $targetId, 'source_id' => $sourceId]);
         }
+        $reviewFingerprint = $this->getRequest()->getParam('review_fingerprint');
+        if (!is_string($reviewFingerprint) || !preg_match('/^[a-f0-9]{64}$/', $reviewFingerprint)) {
+            $this->messageManager->addErrorMessage(__('This review form is out of date. Reload the preview and review the current values before applying. No changes made.'));
+            return $redirect->setPath('merlin_product_filler/shell/preview', ['target_id' => $targetId, 'source_id' => $sourceId]);
+        }
         $input = new ArrayInput([
             '--target-id' => (string)$targetId,
             '--source-id' => (string)$sourceId,
             '--confirm-sku' => (string)$this->getRequest()->getParam('confirm_sku'),
-            '--review-fingerprint' => (string)$this->getRequest()->getParam('review_fingerprint'),
+            '--review-fingerprint' => $reviewFingerprint,
         ], $this->applyCommand->getDefinition());
         $output = new BufferedOutput();
         try {
