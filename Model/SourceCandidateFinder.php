@@ -69,7 +69,7 @@ class SourceCandidateFinder
         // Rank on only the fields needed here. Loading every EAV attribute for
         // every possible source makes the grid and bulk review needlessly slow.
         $collection->setStoreId(0)->addAttributeToSelect([
-            'name', 'status', 'manufacturer', 'modelno', 'mpn',
+            'name', 'status', 'price', 'manufacturer', 'modelno', 'mpn',
             'merlin_model_brand_key', 'merlin_model_code_key',
             'description', 'short_description',
         ])->addAttributeToFilter($filters, null, 'left');
@@ -98,6 +98,7 @@ class SourceCandidateFinder
                 'match_reason' => 'exact brand; ' . implode(', ', $matched) . ($good ? '' : '; source lacks enough populated fields'),
                 'good' => $good,
                 'enabled' => (int)$candidate->getStatus() === 1,
+                'priced' => FillPlanBuilder::hasUsablePrice($candidate->getData('price')),
                 'non_default' => $nonDefault,
                 'category_count' => $categories,
                 'image_count' => $images,
@@ -106,15 +107,18 @@ class SourceCandidateFinder
                 'descriptions' => $hasDescriptions,
             ];
         }
-        usort($results, static function (array $a, array $b): int {
-            foreach (['good', 'enabled', 'non_default', 'category_count', 'image_count', 'manufacturer', 'model_field', 'descriptions'] as $key) {
+        $needsPrice = !FillPlanBuilder::hasUsablePrice($target->getData('price'));
+        usort($results, static function (array $a, array $b) use ($needsPrice): int {
+            // Only populated exact matches can outrank incomplete candidates.
+            // A price-less target needs a priced source. Then prefer enabled
+            // products and finally the highest ID within the same group.
+            foreach ($needsPrice ? ['good', 'priced', 'enabled'] : ['good', 'enabled'] as $key) {
                 $comparison = $b[$key] <=> $a[$key];
                 if ($comparison !== 0) {
                     return $comparison;
                 }
             }
-            $date = strcmp((string)$b['product']->getUpdatedAt(), (string)$a['product']->getUpdatedAt());
-            return $date ?: ((int)$b['product']->getId() <=> (int)$a['product']->getId());
+            return (int)$b['product']->getId() <=> (int)$a['product']->getId();
         });
         // Products in this ranking contain only the fields selected above.
         // Callers building a fill plan load their chosen source in full.
