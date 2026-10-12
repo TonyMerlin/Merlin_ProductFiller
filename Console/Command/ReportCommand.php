@@ -83,6 +83,7 @@ class ReportCommand extends Command
                 'Target SKU' => $target->getSku(),
                 'Target name' => $target->getName(),
                 'Target ebay_quote_ref' => $reference ?: '(missing)',
+                'Reference validation' => $review['reference_problem'] ?? 'valid',
                 'Detected brand' => $identity['brand'] ?: '(missing)',
                 'Detected model' => $identity['model'] ?: '(missing)',
                 'Detected model key' => $identity['model_key'] ?: '(missing)',
@@ -102,7 +103,8 @@ class ReportCommand extends Command
             ];
             $output->writeln('');
             foreach ($values as $label => $value) {
-                $output->writeln($label . ': ' . (string)$value);
+                $printable = preg_replace('/[\x00-\x1F\x7F]/', ' ', (string)$value) ?? '';
+                $output->writeln($label . ': ' . $printable, OutputInterface::OUTPUT_RAW);
             }
             ++$shown;
             if ($shown >= $limit) {
