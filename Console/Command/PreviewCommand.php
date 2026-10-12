@@ -10,6 +10,7 @@ use Merlin\ProductFiller\Model\FillPlanBuilder;
 use Merlin\ProductFiller\Model\PlanFingerprint;
 use Merlin\ProductFiller\Model\ShellProductDetector;
 use Merlin\ProductFiller\Model\SourceCandidateFinder;
+use Merlin\ProductFiller\Model\StockReferencePolicy;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
@@ -23,6 +24,7 @@ class PreviewCommand extends Command
         private ShellProductDetector $detector,
         private FillPlanBuilder $plans,
         private PlanFingerprint $fingerprints,
+        private StockReferencePolicy $references,
         string $name = null
     ) {
         parent::__construct($name);
@@ -34,6 +36,7 @@ class PreviewCommand extends Command
             ->setDescription('Read-only fill or repair diff for a target and exact model source')
             ->addOption('target-id', null, InputOption::VALUE_REQUIRED, 'Target product ID')
             ->addOption('source-id', null, InputOption::VALUE_REQUIRED, 'Source product ID')
+            ->addOption('full-descriptions', null, InputOption::VALUE_NONE, 'Show full source HTML for copied descriptions and the apply fingerprint')
             ->addOption('promotions-only', null, InputOption::VALUE_NONE, 'Preview promotion fields on an already-filled target')
             ->addOption('oven-specs-only', null, InputOption::VALUE_NONE, 'Preview oven model specifications on an already-filled target')
             ->addOption('damage-condition-only', null, InputOption::VALUE_NONE, 'Preview damage_cond on an already-filled target')
@@ -108,10 +111,13 @@ class PreviewCommand extends Command
 
         $this->section($output, 'FIELDS TO KEEP FROM TARGET');
         foreach (FillPlanBuilder::KEEP_FIELDS as $field) {
+            if (array_key_exists($field, $plan['copy'])) {
+                continue;
+            }
             if (in_array($field, ['stock quantity', 'stock status', 'website assignment'], true)) {
                 $output->writeln('  ' . $field . ': preserved on target');
             } else {
-                $output->writeln('  ' . $field . ': ' . $this->display($target->getData($field)));
+                $output->writeln('  ' . $field . ': ' . $this->display($target->getData($field)), OutputInterface::OUTPUT_RAW);
             }
         }
         foreach ($plan['preserved'] as $field) {
@@ -129,11 +135,31 @@ class PreviewCommand extends Command
             $this->line($output, $field, $target->getData($field), $value);
         }
 
+        $copiesDescriptions = array_key_exists('description', $plan['copy'])
+            || array_key_exists('short_description', $plan['copy']);
+        $fullDescriptions = (bool)$input->getOption('full-descriptions');
+        if ($copiesDescriptions && $fullDescriptions && !$plan['content_errors']) {
+            $this->section($output, 'FULL SOURCE DESCRIPTIONS FOR REVIEW');
+            foreach (['description', 'short_description'] as $field) {
+                if (array_key_exists($field, $plan['copy'])) {
+                    $output->writeln('  ' . $field . ':');
+                    $output->writeln((string)$plan['copy'][$field], OutputInterface::OUTPUT_RAW);
+                }
+            }
+        }
+
         $this->section($output, 'FIELDS EXPLICITLY SKIPPED');
         $output->writeln('  ' . implode(', ', FillPlanBuilder::SKIP_FIELDS));
 
         $this->section($output, 'WARNINGS');
         $warnings = $plan['warnings'];
+        $referenceProblem = $this->references->problem((string)$target->getData('ebay_quote_ref'));
+        if ($referenceProblem !== null && !$plan['generated']) {
+            $warnings[] = $referenceProblem;
+        }
+        if ($copiesDescriptions && !$fullDescriptions) {
+            $warnings[] = 'Source descriptions were truncated; re-run with --full-descriptions to review their full HTML before applying.';
+        }
         if (!$shell['is_shell'] && !$promotionsOnly && !$ovenSpecsOnly && !$damageConditionOnly && !$damageFieldsOnly) {
             $warnings[] = 'Target does not meet shell criteria.';
         }
@@ -144,8 +170,13 @@ class PreviewCommand extends Command
         foreach ($warnings as $warning) {
             $output->writeln('  - ' . $warning);
         }
-        $output->writeln('Review fingerprint: ' . $this->fingerprints->create($target, $source, $plan));
-        $output->writeln('Pass this value with --review-fingerprint when applying the reviewed plan.');
+        if (!$plan['content_errors'] && !$plan['price_error']
+            && $referenceProblem === null && (!$copiesDescriptions || $fullDescriptions)) {
+            $output->writeln('Review fingerprint: ' . $this->fingerprints->create($target, $source, $plan));
+            $output->writeln('Pass this value with --review-fingerprint when applying the reviewed plan.');
+        } else {
+            $output->writeln('Review fingerprint withheld. Resolve blocking warnings and use --full-descriptions when descriptions are copied.');
+        }
         $output->writeln('Read-only preview; no products were saved.');
         return 0;
     }
@@ -158,7 +189,7 @@ class PreviewCommand extends Command
 
     private function line(OutputInterface $output, string $field, $before, $after): void
     {
-        $output->writeln('  ' . $field . ': ' . $this->display($before) . ' => ' . $this->display($after));
+        $output->writeln('  ' . $field . ': ' . $this->display($before) . ' => ' . $this->display($after), OutputInterface::OUTPUT_RAW);
     }
 
     private function display($value): string
@@ -166,7 +197,8 @@ class PreviewCommand extends Command
         if (is_array($value)) {
             return json_encode($value, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?: '[]';
         }
-        $text = preg_replace('/\s+/', ' ', trim((string)$value)) ?? '';
+        $text = preg_replace('/[\x00-\x1F\x7F]/', ' ', (string)$value) ?? '';
+        $text = preg_replace('/\s+/', ' ', trim($text)) ?? '';
         if (strlen($text) > 240) {
             return substr($text, 0, 240) . 'â€¦ (' . strlen($text) . ' bytes total)';
         }
