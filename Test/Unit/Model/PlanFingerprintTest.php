@@ -29,7 +29,7 @@ class PlanFingerprintTest extends TestCase
         self::assertNotSame($reviewed, $fingerprints->create($target, $source, $plan));
     }
 
-    public function testReviewedPlanChangesWhenTargetOrAttributeSetPlanChanges(): void
+    public function testReviewedPlanChangesWhenTargetChangesButNotSharedSetHousekeeping(): void
     {
         $fingerprints = new PlanFingerprint();
         $target = $this->product(1, 'NCSI123456', 'Bosch CMA583MS0BB Microwave', [
@@ -44,7 +44,26 @@ class PlanFingerprintTest extends TestCase
         $target->setData('modelno', 'CMA583MS0BB');
         self::assertNotSame($reviewed, $fingerprints->create($target, $source, $plan));
         $target->setData('modelno', null);
-        $plan['attribute_set_additions'][] = 'stockupdated';
+        $plan['attribute_set_additions'] = ['dataupdated', 'priceupdated', 'stockupdated'];
+        self::assertSame($reviewed, $fingerprints->create($target, $source, $plan));
+    }
+
+    public function testPriceChangesInvalidateReviewedPlan(): void
+    {
+        $fingerprints = new PlanFingerprint();
+        $target = $this->product(1, 'NCSI123456', 'Bosch CMA583MS0BB Microwave', ['price' => null]);
+        $source = $this->product(2, 'NCSI654321', 'Graded Bosch CMA583MS0BB Microwave', [
+            'price' => '579.000000', 'special_price' => '469.000000',
+        ]);
+        $plan = $this->plan();
+        $plan['copy']['price'] = '579.000000';
+        $plan['copy']['special_price'] = '469.000000';
+        $reviewed = $fingerprints->create($target, $source, $plan);
+
+        $target->setData('price', '599.000000');
+        self::assertNotSame($reviewed, $fingerprints->create($target, $source, $plan));
+        $target->setData('price', null);
+        $source->setData('special_price', '459.000000');
         self::assertNotSame($reviewed, $fingerprints->create($target, $source, $plan));
     }
 
@@ -60,6 +79,7 @@ class PlanFingerprintTest extends TestCase
             'sku' => $sku,
             'name' => $name,
             'status' => 2,
+            'category_ids' => [],
             'ebay_quote_ref' => 'TEST-01',
             'updated_at' => '2026-10-09 12:00:00',
         ], $fields));
